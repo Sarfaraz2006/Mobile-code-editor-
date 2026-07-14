@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as DocumentPicker from "expo-document-picker";
 
 import { useApp } from "@/src/context/AppContext";
 import { FileNode } from "@/src/lib/fs";
@@ -24,16 +25,21 @@ type PromptState =
 
 export default function FileExplorer() {
   const {
-    isExplorerOpen,
-    setExplorerOpen,
+    activePanel,
+    setActivePanel,
     tree,
     openFile,
     createNewFile,
     createNewFolder,
     renameFileOrFolder,
     removeEntry,
+    bulkImport,
+    setActiveModal,
     theme,
   } = useApp();
+  const isExplorerOpen = activePanel === "explorer";
+  const setExplorerOpen = (v: boolean) =>
+    setActivePanel(v ? "explorer" : null);
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [prompt, setPrompt] = useState<PromptState>(null);
@@ -222,6 +228,49 @@ export default function FileExplorer() {
                   size={16}
                   color={theme.textPrimary}
                 />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={async () => {
+                  try {
+                    const res = await DocumentPicker.getDocumentAsync({
+                      multiple: true,
+                      copyToCacheDirectory: true,
+                    });
+                    if (res.canceled) return;
+                    const files: { path: string; content: string }[] = [];
+                    for (const asset of res.assets || []) {
+                      try {
+                        const r = await fetch(asset.uri);
+                        const text = await r.text();
+                        files.push({
+                          path: asset.name || `imported-${Date.now()}.txt`,
+                          content: text,
+                        });
+                      } catch (err) {
+                        console.warn("[import file]", err);
+                      }
+                    }
+                    if (files.length) await bulkImport(files, false);
+                  } catch (e) {
+                    console.warn("[picker]", e);
+                  }
+                }}
+                testID="fs-import-device"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="upload" size={16} color={theme.textPrimary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => {
+                  setExplorerOpen(false);
+                  setTimeout(() => setActiveModal("githubImport"), 100);
+                }}
+                testID="fs-import-github"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="github" size={16} color={theme.textPrimary} />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.iconBtn}

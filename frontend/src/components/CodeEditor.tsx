@@ -11,12 +11,7 @@ interface Props {
   onChange: (content: string) => void;
 }
 
-/**
- * Build the CodeMirror 5 HTML document injected into the WebView.
- * We use CodeMirror 5 because it has strong mobile keyboard support and a
- * huge collection of language modes shipped as separate files.
- */
-function buildHtml(mode: string, isDark: boolean, initial: string) {
+function buildHtml(mode: string, isDark: boolean, initial: string, fontSize: number) {
   const theme = isDark ? "material-darker" : "eclipse";
   return `<!DOCTYPE html>
 <html>
@@ -27,18 +22,18 @@ function buildHtml(mode: string, isDark: boolean, initial: string) {
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css" />
 <style>
   html, body { margin:0; padding:0; height:100%; background: ${isDark ? "#1E1E1E" : "#FFFFFF"}; }
-  .CodeMirror { height:100%; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.55; }
+  .CodeMirror { height:100%; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: ${fontSize}px; line-height: 1.55; }
   .CodeMirror-gutters { border-right: 1px solid ${isDark ? "#2A2A2A" : "#E5E5E5"}; background: ${isDark ? "#181818" : "#F5F5F5"}; }
   .CodeMirror-linenumber { color: ${isDark ? "#5A5A5A" : "#A0A0A0"}; padding: 0 8px; }
-  .cm-s-material-darker.CodeMirror { background: #1E1E1E; color: #E6E6E6; }
-  .cm-s-eclipse.CodeMirror { background: #FFFFFF; color: #111111; }
-  .CodeMirror-scroll { overflow-x: auto; }
   .CodeMirror-selected { background: ${isDark ? "#264F78" : "#ADD6FF"} !important; }
   .CodeMirror-focused .CodeMirror-selected { background: ${isDark ? "#264F78" : "#ADD6FF"} !important; }
   .CodeMirror-activeline-background { background: ${isDark ? "#232323" : "#F0F0F0"} !important; }
   .CodeMirror-matchingbracket { color: ${isDark ? "#FFD700" : "#0000FF"} !important; text-decoration: underline; }
+  .CodeMirror-foldmarker { color: ${isDark ? "#569CD6" : "#0000FF"}; text-shadow: none; font-family: monospace; }
+  .CodeMirror-foldgutter, .CodeMirror-foldgutter-open, .CodeMirror-foldgutter-folded { color: ${isDark ? "#7A7A7A" : "#999"}; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
@@ -63,6 +58,12 @@ function buildHtml(mode: string, isDark: boolean, initial: string) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/jump-to-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/indent-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
 </head>
 <body>
 <textarea id="code"></textarea>
@@ -76,17 +77,12 @@ function buildHtml(mode: string, isDark: boolean, initial: string) {
     lineNumbers: true,
     mode: ${JSON.stringify(mode)},
     theme: ${JSON.stringify(theme)},
-    indentUnit: 2,
-    tabSize: 2,
-    smartIndent: true,
-    matchBrackets: true,
-    autoCloseBrackets: true,
-    styleActiveLine: true,
-    lineWrapping: true,
+    indentUnit: 2, tabSize: 2, smartIndent: true,
+    matchBrackets: true, autoCloseBrackets: true,
+    styleActiveLine: true, lineWrapping: true,
+    foldGutter: true, gutters: ["CodeMirror-linenumbers","CodeMirror-foldgutter"],
     inputStyle: 'contenteditable',
-    spellcheck: false,
-    autocorrect: false,
-    autocapitalize: false
+    spellcheck: false, autocorrect: false, autocapitalize: false
   });
   editor.setValue(${JSON.stringify(initial)});
   var lastSent = ${JSON.stringify(initial)};
@@ -94,18 +90,22 @@ function buildHtml(mode: string, isDark: boolean, initial: string) {
     var v = editor.getValue();
     if (v !== lastSent) { lastSent = v; post({ type: 'change', value: v }); }
   });
-  window.setEditorValue = function(v){
-    if (v !== editor.getValue()) {
-      var cursor = editor.getCursor();
-      lastSent = v;
-      editor.setValue(v);
-      editor.setCursor(cursor);
-    }
-  };
+  window.__editor = editor;
+  window.setEditorValue = function(v){ if (v !== editor.getValue()) { var c = editor.getCursor(); lastSent = v; editor.setValue(v); editor.setCursor(c); } };
   window.setEditorMode = function(m){ editor.setOption('mode', m); };
-  window.setEditorTheme = function(t){ editor.setOption('theme', t); };
-  window.findInEditor = function(){ editor.execCommand('find'); };
-  window.replaceInEditor = function(){ editor.execCommand('replace'); };
+  window.doAction = function(action){
+    if (action === 'find') editor.execCommand('find');
+    else if (action === 'replace') editor.execCommand('replace');
+    else if (action === 'jumpToLine') editor.execCommand('jumpToLine');
+    else if (action === 'foldAll') editor.execCommand('foldAll');
+    else if (action === 'unfoldAll') editor.execCommand('unfoldAll');
+    else if (action === 'commentLine') editor.toggleComment();
+    else if (action === 'selectAll') editor.execCommand('selectAll');
+    else if (action === 'undo') editor.execCommand('undo');
+    else if (action === 'redo') editor.execCommand('redo');
+    else if (action === 'insertTab') editor.replaceSelection('  ');
+  };
+  window.insertText = function(t){ editor.replaceSelection(t); editor.focus(); };
   post({ type: 'ready' });
 </script>
 </body>
@@ -113,31 +113,24 @@ function buildHtml(mode: string, isDark: boolean, initial: string) {
 }
 
 export default function CodeEditor({ path, content, onChange }: Props) {
-  const { theme } = useApp();
+  const { theme, fontSize, editorAction } = useApp();
   const isDark = theme.name === "dark";
   const webRef = useRef<WebView>(null);
   const readyRef = useRef(false);
-  const lastSentPathRef = useRef<string>("");
 
   const lang = detectLanguage(path);
   const html = useMemo(
-    () => buildHtml(lang.mode, isDark, content),
+    () => buildHtml(lang.mode, isDark, content, fontSize),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [path, isDark], // only rebuild when path/theme changes
+    [path, isDark, fontSize],
   );
 
-  // Push external content changes into the WebView (e.g. after switching tabs).
   useEffect(() => {
     if (!readyRef.current) return;
-    if (lastSentPathRef.current !== path) {
-      // path change: rebuild handles content; but if same html, ensure value updated
-      lastSentPathRef.current = path;
-    }
     const escaped = JSON.stringify(content);
     webRef.current?.injectJavaScript(`window.setEditorValue(${escaped}); true;`);
   }, [content, path]);
 
-  // Update mode when language changes on same webview
   useEffect(() => {
     if (!readyRef.current) return;
     webRef.current?.injectJavaScript(
@@ -145,14 +138,24 @@ export default function CodeEditor({ path, content, onChange }: Props) {
     );
   }, [lang.mode]);
 
+  useEffect(() => {
+    if (!editorAction || !readyRef.current) return;
+    if (editorAction.type === "action") {
+      webRef.current?.injectJavaScript(
+        `window.doAction(${JSON.stringify(editorAction.payload)}); true;`,
+      );
+    } else if (editorAction.type === "insert") {
+      webRef.current?.injectJavaScript(
+        `window.insertText(${JSON.stringify(editorAction.payload)}); true;`,
+      );
+    }
+  }, [editorAction]);
+
   const onMessage = (e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
-      if (msg.type === "ready") {
-        readyRef.current = true;
-      } else if (msg.type === "change") {
-        onChange(msg.value);
-      }
+      if (msg.type === "ready") readyRef.current = true;
+      else if (msg.type === "change") onChange(msg.value);
     } catch {}
   };
 

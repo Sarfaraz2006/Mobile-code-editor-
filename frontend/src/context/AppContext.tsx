@@ -28,10 +28,24 @@ export interface OpenTab {
   dirty: boolean;
 }
 
+export type PanelType = "explorer" | "search" | "settings" | null;
+export type ModalType =
+  | "commandPalette"
+  | "snippets"
+  | "githubImport"
+  | "findReplace"
+  | "preview"
+  | null;
+
 interface AppState {
   theme: Theme;
   themeName: ThemeName;
   toggleTheme: () => void;
+
+  fontSize: number;
+  setFontSize: (size: number) => void;
+
+  sessionId: string;
 
   tree: FileNode[];
   refreshTree: () => Promise<void>;
@@ -56,26 +70,43 @@ interface AppState {
   isTerminalOpen: boolean;
   setTerminalOpen: (v: boolean) => void;
 
-  isExplorerOpen: boolean;
-  setExplorerOpen: (v: boolean) => void;
+  activePanel: PanelType;
+  setActivePanel: (p: PanelType) => void;
+
+  activeModal: ModalType;
+  setActiveModal: (m: ModalType) => void;
 
   isRunning: boolean;
   setRunning: (v: boolean) => void;
+
+  editorAction: { type: string; payload?: any } | null;
+  triggerEditorAction: (type: string, payload?: any) => void;
+
+  bulkImport: (
+    files: { path: string; content: string }[],
+    replace?: boolean,
+  ) => Promise<void>;
 }
 
 const AppContext = createContext<AppState | null>(null);
 
 const THEME_KEY = "cc.theme";
+const FONT_KEY = "cc.fontSize";
+const SESSION_KEY = "cc.sessionId";
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [themeName, setThemeName] = useState<ThemeName>("dark");
+  const [fontSize, setFontSizeState] = useState<number>(14);
+  const [sessionId, setSessionId] = useState<string>("");
   const [tree, setTree] = useState<FileNode[]>([]);
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [terminalOutput, setTerminalOutput] = useState("");
   const [isTerminalOpen, setTerminalOpen] = useState(false);
-  const [isExplorerOpen, setExplorerOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelType>(null);
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [isRunning, setRunning] = useState(false);
+  const [editorAction, setEditorAction] = useState<AppState["editorAction"]>(null);
 
   const refreshTree = useCallback(async () => {
     const t = await listWorkspace();
@@ -88,6 +119,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (savedTheme === "light" || savedTheme === "dark") {
         setThemeName(savedTheme);
       }
+      const savedFont = await storage.getItem<number>(FONT_KEY, 14);
+      if (typeof savedFont === "number" && savedFont >= 10 && savedFont <= 26) {
+        setFontSizeState(savedFont);
+      }
+      let sid = await storage.getItem<string>(SESSION_KEY, "");
+      if (!sid) {
+        sid =
+          "s_" +
+          Math.random().toString(36).slice(2) +
+          Date.now().toString(36);
+        await storage.setItem(SESSION_KEY, sid);
+      }
+      setSessionId(sid);
       await initWorkspace();
       await refreshTree();
     })();
@@ -99,6 +143,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       storage.setItem(THEME_KEY, next);
       return next;
     });
+  }, []);
+
+  const setFontSize = useCallback((size: number) => {
+    const clamped = Math.max(10, Math.min(26, size));
+    setFontSizeState(clamped);
+    storage.setItem(FONT_KEY, clamped);
   }, []);
 
   const openFile = useCallback(
@@ -181,7 +231,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const removeEntry = useCallback(
     async (path: string, _isDir: boolean) => {
       await deleteEntry(path);
-      // Close any tabs whose path is under the deleted entry.
       setTabs((prev) => {
         const filtered = prev.filter(
           (t) => t.path !== path && !t.path.startsWith(path + "/"),
@@ -226,6 +275,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearTerminal = useCallback(() => setTerminalOutput(""), []);
 
+  const triggerEditorAction = useCallback((type: string, payload?: any) => {
+    setEditorAction({ type, payload });
+    // Auto-clear after a tick so repeated triggers of the same action work.
+    setTimeout(() => setEditorAction(null), 50);
+  }, []);
+
+  const bulkImport = useCallback(
+    async (files: { path: string; content: string }[], replace = false) => {
+      if (replace) {
+        // Delete every root entry to give a fresh workspace.
+        const t = await listWorkspace();
+        for (const n of t) await deleteEntry(n.path);
+        setTabs([]);
+        setActivePath(null);
+      }
+      for (const f of files) {
+        try {
+          await writeFile(f.path, f.content);
+        } catch (e) {
+          console.warn("[bulkImport]", f.path, e);
+        }
+      }
+      await refreshTree();
+    },
+    [refreshTree],
+  );
+
   const theme = themes[themeName];
 
   const value = useMemo<AppState>(
@@ -233,6 +309,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       theme,
       themeName,
       toggleTheme,
+      fontSize,
+      setFontSize,
+      sessionId,
       tree,
       refreshTree,
       tabs,
@@ -252,15 +331,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearTerminal,
       isTerminalOpen,
       setTerminalOpen,
-      isExplorerOpen,
-      setExplorerOpen,
+      activePanel,
+      setActivePanel,
+      activeModal,
+      setActiveModal,
       isRunning,
       setRunning,
+      editorAction,
+      triggerEditorAction,
+      bulkImport,
     }),
     [
       theme,
       themeName,
       toggleTheme,
+      fontSize,
+      setFontSize,
+      sessionId,
       tree,
       refreshTree,
       tabs,
@@ -279,8 +366,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       appendTerminal,
       clearTerminal,
       isTerminalOpen,
-      isExplorerOpen,
+      activePanel,
+      activeModal,
       isRunning,
+      editorAction,
+      triggerEditorAction,
+      bulkImport,
     ],
   );
 

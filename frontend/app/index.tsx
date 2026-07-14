@@ -12,7 +12,14 @@ import { Feather } from "@expo/vector-icons";
 
 import { AppProvider, useApp } from "@/src/context/AppContext";
 import CodeEditor from "@/src/components/CodeEditor";
+import CommandPalette from "@/src/components/CommandPalette";
 import FileExplorer from "@/src/components/FileExplorer";
+import GithubImport from "@/src/components/GithubImport";
+import KeyboardToolbar from "@/src/components/KeyboardToolbar";
+import Preview from "@/src/components/Preview";
+import SearchAcrossFiles from "@/src/components/SearchAcrossFiles";
+import Settings from "@/src/components/Settings";
+import Snippets from "@/src/components/Snippets";
 import TabBar from "@/src/components/TabBar";
 import Terminal from "@/src/components/Terminal";
 import TopBar from "@/src/components/TopBar";
@@ -27,7 +34,8 @@ function EditorScreen() {
     activePath,
     updateActiveContent,
     saveActive,
-    setExplorerOpen,
+    setActivePanel,
+    setActiveModal,
     setTerminalOpen,
     appendTerminal,
     clearTerminal,
@@ -45,6 +53,34 @@ function EditorScreen() {
     appendTerminal(`\n[saved] ${activeTab.path}\n`);
   }, [activeTab, saveActive, appendTerminal]);
 
+  const onFormat = useCallback(async () => {
+    if (!activeTab || !activeLang) return;
+    setTerminalOpen(true);
+    appendTerminal(`\n[format] ${activeTab.name}…\n`);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/format`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: activeTab.content,
+          language: activeLang.label.toLowerCase(),
+          filename: activeTab.name,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        appendTerminal(`[format error] ${data.error}\n`);
+      } else if (data.changed) {
+        updateActiveContent(data.formatted);
+        appendTerminal(`[format] ok\n`);
+      } else {
+        appendTerminal(`[format] no changes\n`);
+      }
+    } catch (e: any) {
+      appendTerminal(`[format network error] ${e?.message || String(e)}\n`);
+    }
+  }, [activeTab, activeLang, appendTerminal, setTerminalOpen, updateActiveContent]);
+
   const onRun = useCallback(async () => {
     if (!activeTab || !activeLang || !activeLang.runnable) {
       setTerminalOpen(true);
@@ -53,7 +89,6 @@ function EditorScreen() {
       );
       return;
     }
-    // Auto-save before running
     await saveActive();
     setTerminalOpen(true);
     setRunning(true);
@@ -103,7 +138,7 @@ function EditorScreen() {
         barStyle={theme.name === "dark" ? "light-content" : "dark-content"}
         backgroundColor={theme.surface}
       />
-      <TopBar onSave={onSave} onRun={onRun} />
+      <TopBar onSave={onSave} onFormat={onFormat} />
       <TabBar />
 
       <View style={styles.editorArea} testID="editor-area">
@@ -119,9 +154,9 @@ function EditorScreen() {
         )}
       </View>
 
+      <KeyboardToolbar />
       <Terminal />
 
-      {/* Bottom toolbar */}
       <View
         style={[
           styles.bottomBar,
@@ -136,26 +171,37 @@ function EditorScreen() {
         <ToolbarButton
           icon="folder"
           label="Files"
-          onPress={() => setExplorerOpen(true)}
+          onPress={() => setActivePanel("explorer")}
           testID="bottom-explorer-btn"
         />
         <ToolbarButton
-          icon="save"
-          label="Save"
-          onPress={onSave}
-          disabled={!activeTab}
-          testID="bottom-save-btn"
+          icon="clipboard"
+          label="Snippet"
+          onPress={() => setActiveModal("snippets")}
+          testID="bottom-snippets-btn"
         />
         <ToolbarButton
           icon="terminal"
-          label="Output"
+          label="Term"
           onPress={() => setTerminalOpen(true)}
           testID="bottom-terminal-btn"
+        />
+        <ToolbarButton
+          icon="command"
+          label="⌘"
+          onPress={() => setActiveModal("commandPalette")}
+          testID="bottom-cmd-btn"
         />
         <RunFab onPress={onRun} disabled={!activeLang?.runnable || isRunning} />
       </View>
 
       <FileExplorer />
+      <SearchAcrossFiles />
+      <Settings />
+      <CommandPalette />
+      <Snippets />
+      <GithubImport />
+      <Preview />
     </SafeAreaView>
   );
 }
@@ -184,7 +230,7 @@ function ToolbarButton({
     >
       <Feather
         name={icon}
-        size={18}
+        size={17}
         color={disabled ? theme.textSecondary : theme.textPrimary}
       />
       <Text
@@ -232,7 +278,7 @@ function RunFab({
 }
 
 function EmptyState() {
-  const { theme, setExplorerOpen } = useApp();
+  const { theme, setActivePanel, setActiveModal } = useApp();
   return (
     <View
       style={[styles.emptyRoot, { backgroundColor: theme.editorBg }]}
@@ -258,18 +304,33 @@ function EmptyState() {
         <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
           A VS Code style editor, built for your phone.
         </Text>
-        <TouchableOpacity
-          onPress={() => setExplorerOpen(true)}
-          style={[styles.emptyCta, { backgroundColor: theme.accent }]}
-          testID="empty-open-explorer"
-        >
-          <Feather name="folder" size={16} color="#fff" />
-          <Text style={styles.emptyCtaText}>Open File Explorer</Text>
-        </TouchableOpacity>
-        <Text
-          style={[styles.emptyHint, { color: theme.textSecondary }]}
-        >
-          Tap a file in the explorer to start editing.
+        <View style={styles.emptyCtas}>
+          <TouchableOpacity
+            onPress={() => setActivePanel("explorer")}
+            style={[styles.emptyCta, { backgroundColor: theme.accent }]}
+            testID="empty-open-explorer"
+          >
+            <Feather name="folder" size={16} color="#fff" />
+            <Text style={styles.emptyCtaText}>Open Files</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveModal("githubImport")}
+            style={[
+              styles.emptyCtaOutline,
+              { borderColor: theme.border, backgroundColor: theme.surface },
+            ]}
+            testID="empty-github-import"
+          >
+            <Feather name="github" size={16} color={theme.textPrimary} />
+            <Text
+              style={[styles.emptyCtaOutlineText, { color: theme.textPrimary }]}
+            >
+              Import Repo
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>
+          Tap a file in Files → or paste a GitHub URL to import a whole repo.
         </Text>
       </View>
     </View>
@@ -291,31 +352,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderTopWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingTop: 6,
-    gap: 4,
+    gap: 2,
   },
   toolbarBtn: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 6,
-    gap: 2,
+    paddingVertical: 4,
+    gap: 1,
   },
   toolbarBtnText: {
     fontSize: 10,
     fontWeight: "600",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   runFab: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 4,
-    gap: 6,
-    minWidth: 88,
+    gap: 5,
+    minWidth: 80,
   },
   runFabText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   emptyRoot: { flex: 1 },
@@ -338,15 +399,29 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+  emptyCtas: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 28,
+  },
   emptyCta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 6,
-    marginTop: 28,
   },
-  emptyCtaText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  emptyCtaText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  emptyCtaOutline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  emptyCtaOutlineText: { fontWeight: "700", fontSize: 13 },
   emptyHint: { fontSize: 11, marginTop: 16, textAlign: "center" },
 });

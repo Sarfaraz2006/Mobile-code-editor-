@@ -1,0 +1,61 @@
+{
+  "summary": "Iteration-2 CodeCraft VS-Code-power expansion fully validated. Backend: 13/13 new pytest tests pass against public EXPO_PUBLIC_BACKEND_URL — POST /api/terminal/exec (echo, pwd returns session tempdir starting with cc-term-, session persistence via echo>f.txt then cat f.txt, empty command -> 400, dangerous 'rm -rf /' -> 400 with 'Command blocked'), POST /api/terminal/reset returns {ok:true} and next exec sees fresh tempdir, POST /api/github/import with 'https://github.com/octocat/Hello-World' returns file_count>=1 with README containing 'Hello World', invalid URL -> 400 'Invalid GitHub URL', POST /api/format python via black formats 'def f(x): return   x+1' -> 'def f(x):\\n    return x + 1', JS via prettier formats 'const a  =   1;function foo( x ){return x+1}', unknown language returns 200 with error+unchanged (no crash). Regression: /api/run python and /api/backup GET/POST still work. Frontend (mobile 390x844, Expo web): empty state shows Open Files + Import Repo CTAs, top bar shows all 7 icons (folder/search/⌘/format/save/terminal/settings) and top-find-btn + top-preview-btn conditionally appear when an active file is open, bottom bar shows Files/Snippet/Term/⌘/Run. Command palette opens via bottom '⌘' and lists 20 commands, typing 'format' filters to 1 item. GitHub Import modal (from empty state) with 'octocat/Hello-World' imported successfully and added README to file explorer alongside seeded hello.js/hello.py/welcome.md. Snippets modal shows 14 snippets; tapping first snippet inserted 'const name = (args) => {' into hello.py editor and closed modal. Terminal: `echo mobile-hi` shows 'mobile-hi' output line, `pwd` shows cc-term- tempdir, reset button clears backend session (subsequent 'ls' shows fresh dir). Search across files for 'Hello' returned 4 matches across seed files; clicking result opened the file in editor. Settings panel: theme toggle and font size chips 12/14/16/18/20 all present and clickable. Preview icon (eye) appears when active file is markdown (welcome.md) and opens preview modal. Format button in top bar triggered /api/format without crash. Multi-tab regression works (2 tabs open simultaneously). Only issues: (1) recurring 'e.defineSimpleMode is not a function' pageerror from iteration_1 was NOT reobserved this run (no pageerrors captured across all flows), and (2) minor UI: the preview modal's preview-close button and the search panel's search-run button reported 'Element is outside of the viewport' when clicked via Playwright at 390x844 — the elements ARE in DOM and can be clicked via JS .click(), but they render below the visible viewport on the smallest mobile size. Consider raising them or wrapping content in a ScrollView so the CTA stays reachable. Console warning 'props.pointerEvents is deprecated' still emitted (react-native-web internal).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Preview modal",
+        "issue": "preview-close button is off-viewport on 390x844 mobile size — clickable via JS but not via real touch scroll if user hasn't scrolled. Move close to sticky header/footer or wrap body in ScrollView.",
+        "testID": "preview-close",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "SearchAcrossFiles",
+        "issue": "search-run (Search) button is off-viewport on 390x844 when the modal renders with a large results header — same fix: sticky top bar with input+button or reduce vertical padding.",
+        "testID": "search-run",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Preview / Search modals (mobile 390x844)",
+        "issues": ["Primary action buttons (close, run) can fall below the fold on the smallest mobile viewport"]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "react-native-web",
+        "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents' still emitted (unchanged from iteration_1). Migrate any explicit pointerEvents prop to style.pointerEvents."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_code_editor_api.py",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "Fix preview-close and search-run buttons falling off the 390x844 mobile viewport — pin action buttons to a sticky header or wrap modal body in ScrollView.",
+    "Optional: replace deprecated Pydantic v1 .dict() calls with .model_dump() in server.py (backup_file uses payload.dict()).",
+    "Optional: address 'props.pointerEvents is deprecated' react-native-web warning by moving to style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "server.py:446 uses payload.dict() (Pydantic v1); replace with model_dump() for Pydantic v2 forward-compat.",
+    "server.py TERMINAL_SESSIONS is an in-memory dict — session tempdirs leak on process restart and there is no LRU eviction. For MVP this is fine, but add a cleanup task or TTL for production.",
+    "github_import uses synchronous 'requests' inside async endpoint — blocks the event loop for the duration of every blob fetch (potentially many for large repos). Consider httpx.AsyncClient or asyncio.to_thread.",
+    "Terminal denylist is a substring check on lowered command; trivially bypassable ('RM -RF /' works due to lowered but 'rm  -rf  /' with extra spaces slips through). Not a security control, only a foot-gun guard — acceptable for MVP but document."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~95%"},
+  "seed_data_creation": "MongoDB TEST_reg_* backup rows via /api/backup during regression test. Terminal sessions TEST_term_* created ephemeral tempdirs under /tmp/cc-term-*/; test also resets/deletes them. No persistent state left behind that would interfere with next run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run backend regression: `EXPO_PUBLIC_BACKEND_URL=$(grep EXPO_PUBLIC_BACKEND_URL /app/frontend/.env | cut -d= -f2) pytest /app/backend/tests/ -v`. Both test_code_editor_api.py (11 tests) and test_new_features.py (13 tests) should pass. Key testIDs for iteration_2 additions: empty-github-import, top-search-btn, top-cmd-btn, top-format-btn, top-save-btn, top-terminal-btn, top-settings-btn, top-find-btn (only when file open), top-preview-btn (only for md/html), bottom-snippets-btn, bottom-terminal-btn, bottom-cmd-btn, cmd-palette-input, cmd-item-<id>, snippet-<id>, snippets-search, gh-url-input, gh-import-btn, terminal-input, terminal-send, terminal-reset, terminal-clear, terminal-output-text, search-panel, search-input, search-run, search-result-<i>, settings-panel, settings-theme-toggle, font-<size>, preview-close.",
+  "rca_of_issue": "preview-close / search-run 'outside viewport' RCA: the SearchAcrossFiles + Preview modals render as full-height views but the primary action buttons live below content padding + KeyboardAvoidingView spacer. On 390x844 the content pushes them past the 844 fold, so Playwright's viewport-strict click() rejects them. Real users on real devices can scroll to reach them, but discoverability is poor. Fix: wrap modal body in a ScrollView and keep action bar (Cancel/Run/Close) in a sticky footer inside SafeAreaView, or reduce top padding when Insets.top==0 on web."
+}
