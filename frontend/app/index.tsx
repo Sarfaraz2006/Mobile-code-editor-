@@ -13,8 +13,10 @@ import { Feather } from "@expo/vector-icons";
 import { AppProvider, useApp } from "@/src/context/AppContext";
 import CodeEditor from "@/src/components/CodeEditor";
 import CommandPalette from "@/src/components/CommandPalette";
+import Extensions from "@/src/components/Extensions";
 import FileExplorer from "@/src/components/FileExplorer";
 import GithubImport from "@/src/components/GithubImport";
+import GitPanel from "@/src/components/GitPanel";
 import KeyboardToolbar from "@/src/components/KeyboardToolbar";
 import Preview from "@/src/components/Preview";
 import SearchAcrossFiles from "@/src/components/SearchAcrossFiles";
@@ -198,10 +200,12 @@ function EditorScreen() {
       <FileExplorer />
       <SearchAcrossFiles />
       <Settings />
+      <GitPanel />
       <CommandPalette />
       <Snippets />
       <GithubImport />
       <Preview />
+      <Extensions />
     </SafeAreaView>
   );
 }

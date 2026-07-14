@@ -19,7 +19,7 @@ import {
   renameEntry,
   writeFile,
 } from "@/src/lib/fs";
-import { Theme, ThemeName, themes } from "@/src/lib/themes";
+import { FontFamilyKey, Theme, ThemeName, themes } from "@/src/lib/themes";
 
 export interface OpenTab {
   path: string;
@@ -28,22 +28,27 @@ export interface OpenTab {
   dirty: boolean;
 }
 
-export type PanelType = "explorer" | "search" | "settings" | null;
+export type PanelType = "explorer" | "search" | "settings" | "git" | "extensions" | null;
 export type ModalType =
   | "commandPalette"
   | "snippets"
   | "githubImport"
   | "findReplace"
   | "preview"
+  | "extensions"
   | null;
 
 interface AppState {
   theme: Theme;
   themeName: ThemeName;
+  setThemeName: (name: ThemeName) => void;
   toggleTheme: () => void;
 
   fontSize: number;
   setFontSize: (size: number) => void;
+
+  fontFamily: FontFamilyKey;
+  setFontFamily: (f: FontFamilyKey) => void;
 
   sessionId: string;
 
@@ -92,11 +97,13 @@ const AppContext = createContext<AppState | null>(null);
 
 const THEME_KEY = "cc.theme";
 const FONT_KEY = "cc.fontSize";
+const FONT_FAMILY_KEY = "cc.fontFamily";
 const SESSION_KEY = "cc.sessionId";
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [themeName, setThemeName] = useState<ThemeName>("dark");
+  const [themeName, setThemeNameState] = useState<ThemeName>("dark");
   const [fontSize, setFontSizeState] = useState<number>(14);
+  const [fontFamily, setFontFamilyState] = useState<FontFamilyKey>("jetbrains");
   const [sessionId, setSessionId] = useState<string>("");
   const [tree, setTree] = useState<FileNode[]>([]);
   const [tabs, setTabs] = useState<OpenTab[]>([]);
@@ -116,13 +123,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       const savedTheme = await storage.getItem<ThemeName>(THEME_KEY, "dark");
-      if (savedTheme === "light" || savedTheme === "dark") {
-        setThemeName(savedTheme);
+      if (savedTheme && themes[savedTheme as ThemeName]) {
+        setThemeNameState(savedTheme as ThemeName);
       }
       const savedFont = await storage.getItem<number>(FONT_KEY, 14);
       if (typeof savedFont === "number" && savedFont >= 10 && savedFont <= 26) {
         setFontSizeState(savedFont);
       }
+      const savedFamily = await storage.getItem<FontFamilyKey>(FONT_FAMILY_KEY, "jetbrains");
+      if (savedFamily) setFontFamilyState(savedFamily);
       let sid = await storage.getItem<string>(SESSION_KEY, "");
       if (!sid) {
         sid =
@@ -137,9 +146,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [refreshTree]);
 
+  const setThemeName = useCallback((name: ThemeName) => {
+    if (!themes[name]) return;
+    setThemeNameState(name);
+    storage.setItem(THEME_KEY, name);
+  }, []);
+
   const toggleTheme = useCallback(() => {
-    setThemeName((prev) => {
-      const next = prev === "dark" ? "light" : "dark";
+    setThemeNameState((prev) => {
+      const next = themes[prev].isDark ? "light" : "dark";
       storage.setItem(THEME_KEY, next);
       return next;
     });
@@ -149,6 +164,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const clamped = Math.max(10, Math.min(26, size));
     setFontSizeState(clamped);
     storage.setItem(FONT_KEY, clamped);
+  }, []);
+
+  const setFontFamily = useCallback((f: FontFamilyKey) => {
+    setFontFamilyState(f);
+    storage.setItem(FONT_FAMILY_KEY, f);
   }, []);
 
   const openFile = useCallback(
@@ -308,9 +328,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       theme,
       themeName,
+      setThemeName,
       toggleTheme,
       fontSize,
       setFontSize,
+      fontFamily,
+      setFontFamily,
       sessionId,
       tree,
       refreshTree,
@@ -344,9 +367,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       theme,
       themeName,
+      setThemeName,
       toggleTheme,
       fontSize,
       setFontSize,
+      fontFamily,
+      setFontFamily,
       sessionId,
       tree,
       refreshTree,

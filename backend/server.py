@@ -426,7 +426,122 @@ async def format_code(payload: FormatRequest):
     )
 
 
-# ---- File backup (unchanged) ----
+# ---- Git operations ----
+class GitRequest(BaseModel):
+    session_id: str
+    args: Optional[List[str]] = None
+    message: Optional[str] = None
+    remote_url: Optional[str] = None
+    branch: Optional[str] = None
+    files: Optional[List[dict]] = None  # [{path, content}] – write into repo
+
+
+def _repo_dir(session_id: str) -> str:
+    d = os.path.join("/tmp", f"cc-repo-{session_id[:16]}")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+async def _git(cwd: str, *args: str) -> RunResponse:
+    return await _run_shell(
+        "git " + " ".join([f"'{a}'" for a in args]), cwd, 20
+    )
+
+
+@api_router.post("/git/init")
+async def git_init(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    if not os.path.isdir(os.path.join(cwd, ".git")):
+        r = await _git(cwd, "init", "-b", "main")
+    else:
+        r = RunResponse(stdout="Reinitialized existing git repository\n", stderr="", exit_code=0, duration_ms=0)
+    # Ensure user identity for commits
+    await _git(cwd, "config", "user.email", "codecraft@mobile.local")
+    await _git(cwd, "config", "user.name", "CodeCraft User")
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/write")
+async def git_write(payload: GitRequest):
+    """Sync client files into the repo working tree (called before status/commit)."""
+    cwd = _repo_dir(payload.session_id)
+    written = 0
+    if payload.files:
+        for f in payload.files:
+            rel = f.get("path")
+            content = f.get("content", "")
+            if not rel:
+                continue
+            abs_path = os.path.join(cwd, rel)
+            parent = os.path.dirname(abs_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(abs_path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            written += 1
+    return {"cwd": cwd, "written": written}
+
+
+@api_router.post("/git/status")
+async def git_status(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    r = await _git(cwd, "status", "--porcelain=v1", "-b")
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/add")
+async def git_add(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    args = payload.args or ["."]
+    r = await _git(cwd, "add", *args)
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/commit")
+async def git_commit(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    msg = (payload.message or "").strip() or "update"
+    r = await _git(cwd, "commit", "-m", msg)
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/log")
+async def git_log(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    r = await _git(
+        cwd, "log", "--pretty=format:%h %ad %s", "--date=short", "-n", "30"
+    )
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/remote")
+async def git_remote(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    if payload.remote_url:
+        # Set or replace origin
+        await _git(cwd, "remote", "remove", "origin")
+        r = await _git(cwd, "remote", "add", "origin", payload.remote_url)
+        return {**r.dict(), "cwd": cwd, "origin": payload.remote_url}
+    r = await _git(cwd, "remote", "-v")
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/push")
+async def git_push(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    branch = payload.branch or "main"
+    r = await _git(cwd, "push", "-u", "origin", branch)
+    return {**r.dict(), "cwd": cwd}
+
+
+@api_router.post("/git/pull")
+async def git_pull(payload: GitRequest):
+    cwd = _repo_dir(payload.session_id)
+    r = await _git(cwd, "pull", "--ff-only", "origin", payload.branch or "main")
+    return {**r.dict(), "cwd": cwd}
+
+
+
 class FileBackup(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     path: str
