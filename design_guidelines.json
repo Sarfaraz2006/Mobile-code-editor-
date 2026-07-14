@@ -1,0 +1,114 @@
+{
+  "typography": {
+    "headings": "IBM Plex Sans",
+    "body": "IBM Plex Sans",
+    "monospace": "JetBrains Mono",
+    "weights": {
+      "light": 300,
+      "regular": 400,
+      "semibold": 600,
+      "bold": 700
+    },
+    "hierarchy": {
+      "h1": "text-2xl tracking-tight font-semibold",
+      "h2": "text-xl tracking-tight font-semibold",
+      "body": "text-sm leading-relaxed",
+      "code": "text-xs md:text-sm leading-relaxed tracking-wide"
+    }
+  },
+  "colors": {
+    "dark": {
+      "background": "#0A0A0A",
+      "surface": "#121212",
+      "surface_active": "#1E1E1E",
+      "border": "#222222",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "#888888",
+      "accent": "#007AFF",
+      "accent_hover": "#0056B3",
+      "syntax": {
+        "keyword": "#569CD6",
+        "string": "#CE9178",
+        "function": "#DCDCAA",
+        "variable": "#9CDCFE",
+        "comment": "#6A9955",
+        "number": "#B5CEA8"
+      }
+    },
+    "light": {
+      "background": "#FFFFFF",
+      "surface": "#F5F5F5",
+      "surface_active": "#EAEAEA",
+      "border": "#D4D4D4",
+      "text_primary": "#111111",
+      "text_secondary": "#666666",
+      "accent": "#007AFF",
+      "accent_hover": "#0056B3",
+      "syntax": {
+        "keyword": "#0000FF",
+        "string": "#A31515",
+        "function": "#795E26",
+        "variable": "#001080",
+        "comment": "#008000",
+        "number": "#098658"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "borders": "1px solid border colors to separate panels (Technical Look). NO rounded corners for main layout panels to maximize screen real estate and convey a technical/brutalist aesthetic.",
+    "shadows": "Replace soft shadows with 1px solid strokes or 2px 'Inner Glow' highlights. Use shadow-2xl ONLY for floating elements like dropdowns.",
+    "glassmorphism": "Avoid glassmorphism. Use Flat Solid surfaces to prevent visual refraction of dense code data.",
+    "theme_toggle": "Mandatory dark/light mode toggle accessible from settings or sidebar."
+  },
+  "components": {
+    "sidebar_drawer": "Use Shadcn Sheet (side='left') for the File Explorer. Swipeable and compact. Use dense spacing (p-2).",
+    "bottom_toolbar": "Fixed at bottom (h-14). Contains icon buttons for Explorer, Search, Terminal, Settings. Must have a distinct top border.",
+    "tab_bar": "Horizontal scrollable flex container (h-10). Active tab has top border (accent color) and matches editor background. Inactive tabs have surface background.",
+    "terminal_drawer": "Use Shadcn Sheet (side='bottom') or a resizable bottom pane for output. Background must be darker than editor.",
+    "code_editor": "A full-width, full-height container with syntax highlighting and line numbers. Monospace font is mandatory.",
+    "floating_action_button": "Prominent 'Run Code' FAB (Primary Accent color) positioned at bottom-right, just above the bottom toolbar. Square or slightly rounded (rounded-md), not fully circular."
+  },
+  "grids_and_layouts": {
+    "app_container": "100dvh, flex-col, overflow-hidden. NO global scrolling.",
+    "main_area": "flex-1, flex-row, relative, overflow-hidden.",
+    "editor_area": "flex-1, flex-col, bg-background."
+  },
+  "motion": {
+    "drawers": "Slide in/out smoothly (transform 0.2s ease).",
+    "tabs": "Instant switch (no animation) to feel snappy like a desktop IDE.",
+    "buttons": "Subtle scale down on active/press (scale-95) and background color shift on hover. MUST explicitly set text color on hover."
+  },
+  "accessibility": {
+    "contrast": "Ensure code syntax colors meet APCA/WCAG AA against the background.",
+    "touch_targets": "Minimum 44x44px for all buttons (especially in the file explorer tree and tab close buttons).",
+    "data_testid": "All interactive elements MUST include data-testid attribute (e.g., 'file-explorer-toggle', 'run-code-button', 'tab-close-button')."
+  },
+  "media": {
+    "icons": "Use lucide-react for UI icons. Do not use AI emojis."
+  },
+  "3d_libraries": {
+    "usage": "None. This is a high-performance 2D developer tool."
+  },
+  "image_urls": {
+    "empty_state_background": {
+      "url": "https://images.unsplash.com/photo-1518773553398-650c184e0bb3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHwyfHxjb2RpbmclMjBhYnN0cmFjdCUyMGRhcmt8ZW58MHx8fHwxNzg0MDY2MDY4fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract code on screen",
+      "category": "Used sparingly at 10% opacity for the empty state when no files are open."
+    }
+  },
+  "component_path": "/app/frontend/src/components/ui",
+  "instructions_to_main_agent": [
+    "Build a mobile-first, VS Code-like web application in React using Tailwind CSS.",
+    "Use .js files (JSX syntax) as per the environment, NOT .tsx files.",
+    "CRITICAL: The layout must be strictly 100dvh to prevent body scrolling. Scroll should only happen within the code editor, terminal, and file explorer areas.",
+    "Use standard HTML/Tailwind for the layout structure, but use Shadcn's Sheet component for the File Explorer (left) and Terminal (bottom). Override Shadcn default radii to be sharper (rounded-none).",
+    "Implement multi-tab logic: maintain state of open files and the current active file.",
+    "For the code editor, build a functional textarea with line numbers next to it, using a monospace font (JetBrains Mono). If you can, integrate PrismJS for highlighting, or keep it clean and performant.",
+    "The 'Run' button must be prominently displayed (either via FAB or top toolbar) and mock execution by printing output to the Terminal drawer.",
+    "Implement a robust mock file system holding files and folders in state, capable of creating, renaming, and deleting files.",
+    "Do not center align text globally. Keep all code and file tree items left-aligned.",
+    "Ensure dark/light theme switching works instantly via a context or state. Default to dark theme.",
+    "Include data-testid on every interactive element."
+  ],
+  "GENERAL UI UX DESIGN GUIDELINES": "Do not make generic centered layouts. Prioritize high-density, functional interfaces. Use strict z-index management for drawers and modals. Exclude transforms from universal transitions. Use solid, high-contrast surfaces instead of glassmorphism to preserve readability of dense code. Create depth via 1px borders and tight padding. All interactive elements MUST include a data-testid attribute. Do not use AI emojis for icons; strictly use lucide-react. NEVER use complete transparent background in headers, overlays, or surfaces that have content under it."
+}
