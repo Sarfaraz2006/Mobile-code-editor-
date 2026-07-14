@@ -128,7 +128,7 @@ export default function Preview() {
           <iframe
             title="preview"
             srcDoc={doc}
-            sandbox="allow-same-origin"
+            sandbox="allow-scripts"
             style={{
               flex: 1,
               border: "none",
