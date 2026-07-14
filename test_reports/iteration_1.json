@@ -1,0 +1,47 @@
+{
+  "summary": "CodeCraft mobile code editor MVP tested end-to-end. Backend: 11/11 pytest tests passed against public EXPO_PUBLIC_BACKEND_URL — /api/ health, /api/languages, /api/run for python & javascript (stdout, runtime error stderr, infinite-loop timeout with timed_out=true), unsupported language returns 400, and /api/backup POST+GET round-trip persists to MongoDB with upsert semantics and no leaked _id. Frontend (mobile viewport 390x844, Expo web preview): empty CodeCraft state renders with 'Open File Explorer' CTA, explorer opens and shows all 3 seed files (welcome.md, hello.py, hello.js), tapping hello.py opens it inside the CodeMirror iframe with Python syntax highlighting, Run executes on backend and terminal shows 'Hello, friend 1/2/3!' with '[exit 0]' correctly, theme toggle switches editor + chrome between dark/light, multi-tab works, and new file creation via the '+' icon works. One JS console error observed: 'e.defineSimpleMode is not a function' — comes from CodeMirror shell mode being loaded without its addon/mode/simple.js dependency; benign for py/js/md but should be fixed. Also react-native-web warning: 'props.pointerEvents is deprecated'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "CodeEditor.web.tsx (CodeMirror iframe)",
+        "issue": "PageError: 'e.defineSimpleMode is not a function' fires whenever a new editor iframe is built. CodeMirror 5 shell mode (mode/shell/shell.min.js) requires addon/mode/simple.min.js which is not included in the srcDoc. Either drop the shell mode script or add https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/mode/simple.min.js before it. Reference: /app/frontend/src/components/CodeEditor.web.tsx:43"
+      },
+      {
+        "component": "react-native-web deprecation",
+        "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents' — likely emitted from an internal RN component; audit any explicit pointerEvents prop usage and move it to style.pointerEvents."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_code_editor_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix CodeMirror shell mode dependency in CodeEditor.web.tsx: include 'addon/mode/simple.min.js' before 'mode/shell/shell.min.js' (or remove the shell mode script) to silence the recurring 'defineSimpleMode is not a function' pageerror.",
+    "Move any explicit pointerEvents prop to style.pointerEvents to remove the RN-Web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py uses payload.dict() (deprecated in Pydantic v2, replace with model_dump()) — non-blocking.",
+    "server.py uses @app.on_event('shutdown') which is deprecated in FastAPI; consider lifespan handlers.",
+    "run_code launches python3 with -I (isolated) which is fine; consider also disabling network/writes for hardening.",
+    "Backup endpoint returns list without pagination limit (uses to_list(1000)); acceptable for MVP.",
+    "No auth / rate limiting on /api/run — acceptable for MVP but flag for production."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_code_editor_api.py (new)",
+    "/app/backend/tests/__init__.py (new empty)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created MongoDB backup rows under a TEST_ device_id (device_id prefix TEST_dev_*, path 'TEST_notes.txt') via the /api/backup endpoint. Also created a 'TEST_new.py' file inside the frontend virtual FS (AsyncStorage on device only; not on server).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_code_editor_api.py and use EXPO_PUBLIC_BACKEND_URL. To re-run: `EXPO_PUBLIC_BACKEND_URL=<url> pytest /app/backend/tests/ -v`. Frontend web preview served via iframe/CodeMirror5; use mobile viewport 390x844 and testIDs: editor-empty-state, empty-open-explorer, file-explorer-panel, fs-entry-{path}, fs-new-file, fs-prompt-input, fs-prompt-confirm, run-code-button, top-theme-btn, top-explorer-btn.",
+  "rca_of_issue": "The 'defineSimpleMode is not a function' error is a missing-dependency bug in the CodeMirror bundle inside CodeEditor.web.tsx. CodeMirror5's shell mode is implemented via `CodeMirror.defineSimpleMode(...)` which is provided by `addon/mode/simple.js`. The srcDoc loads shell/shell.min.js but not simple.min.js, so the script throws at parse time. Fix: add `<script src=\"https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/mode/simple.min.js\"></script>` before the shell mode script, or drop shell mode entirely."
+}
