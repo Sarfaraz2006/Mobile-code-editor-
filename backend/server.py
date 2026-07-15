@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,6 +6,7 @@ import os
 import logging
 import asyncio
 import tempfile
+import shutil
 import base64
 import re
 from pathlib import Path
@@ -14,20 +15,190 @@ from typing import Optional, List
 import uuid
 from datetime import datetime, timezone
 import requests
+import pty
+import fcntl
+import termios
+import struct
+import subprocess
 
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL')
+db_name = os.environ.get('DB_NAME', 'mobile_editor')
+
+class MockCollection:
+    def __init__(self):
+        self.backups = {}
+    async def replace_one(self, filter_query, doc, upsert=True):
+        device_id = filter_query.get("device_id")
+        path = filter_query.get("path")
+        key = f"{device_id}:{path}"
+        self.backups[key] = doc
+        return doc
+    def find(self, filter_query, projection=None):
+        device_id = filter_query.get("device_id")
+        results = [v for k, v in self.backups.items() if k.startswith(f"{device_id}:")]
+        class MockCursor:
+            async def to_list(self, length):
+                return results
+        return MockCursor()
+
+class MockDB:
+    def __init__(self):
+        self.file_backups = MockCollection()
+
+if mongo_url:
+    try:
+        client = AsyncIOMotorClient(mongo_url)
+        db = client[db_name]
+    except Exception:
+        db = MockDB()
+else:
+    db = MockDB()
+
 
 app = FastAPI()
+
+class PTYSession:
+    def __init__(self, session_id: str, cwd: str):
+        self.session_id = session_id
+        self.cwd = cwd
+        self.master_fd = None
+        self.slave_fd = None
+        self.proc = None
+
+    def start(self):
+        self.master_fd, self.slave_fd = pty.openpty()
+        
+        # Set non-blocking on master_fd
+        flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
+        fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        
+        env = os.environ.copy()
+        env["TERM"] = "xterm-256color"
+        
+        shell = "bash"
+        if shutil.which("bash") is None:
+            shell = "sh"
+
+        self.proc = subprocess.Popen(
+            [shell],
+            preexec_fn=os.setsid,
+            stdin=self.slave_fd,
+            stdout=self.slave_fd,
+            stderr=self.slave_fd,
+            cwd=self.cwd,
+            env=env
+        )
+        # Close slave_fd in parent process as Popen has duplicated it
+        os.close(self.slave_fd)
+        self.slave_fd = None
+
+    async def run_read_loop(self, websocket: WebSocket):
+        try:
+            while True:
+                if self.proc and self.proc.poll() is not None:
+                    break
+                try:
+                    data = os.read(self.master_fd, 4096)
+                    if not data:
+                        break
+                    await websocket.send_json({
+                        "type": "data",
+                        "data": data.decode("utf-8", errors="replace")
+                    })
+                except BlockingIOError:
+                    await asyncio.sleep(0.01)
+                except Exception:
+                    break
+        except Exception:
+            pass
+        finally:
+            self.close()
+
+    def write(self, data: str):
+        if self.master_fd is not None:
+            try:
+                os.write(self.master_fd, data.encode("utf-8"))
+            except Exception:
+                pass
+
+    def resize(self, cols: int, rows: int):
+        if self.master_fd is not None:
+            try:
+                size = struct.pack("HHHH", rows, cols, 0, 0)
+                fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, size)
+            except Exception:
+                pass
+
+    def close(self):
+        if self.proc:
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+            self.proc = None
+        if self.master_fd is not None:
+            try:
+                os.close(self.master_fd)
+            except Exception:
+                pass
+            self.master_fd = None
+
+
+ACTIVE_PTY_SESSIONS: dict[str, PTYSession] = {}
+
+
+@app.websocket("/api/terminal/ws/{session_id}")
+async def terminal_websocket(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+    cwd = _repo_dir(session_id)
+    
+    # Clean up previous session if any
+    if session_id in ACTIVE_PTY_SESSIONS:
+        try:
+            ACTIVE_PTY_SESSIONS[session_id].close()
+        except Exception:
+            pass
+            
+    session = PTYSession(session_id, cwd)
+    try:
+        session.start()
+    except Exception as e:
+        await websocket.send_json({"type": "data", "data": f"Failed to start terminal: {str(e)}\r\n"})
+        await websocket.close()
+        return
+
+    ACTIVE_PTY_SESSIONS[session_id] = session
+    
+    read_task = asyncio.create_task(session.run_read_loop(websocket))
+    
+    try:
+        while True:
+            msg = await websocket.receive_json()
+            mtype = msg.get("type")
+            if mtype == "input":
+                session.write(msg.get("data", ""))
+            elif mtype == "resize":
+                cols = msg.get("cols", 80)
+                rows = msg.get("rows", 24)
+                session.resize(cols, rows)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        read_task.cancel()
+        session.close()
+        ACTIVE_PTY_SESSIONS.pop(session_id, None)
+
+
 api_router = APIRouter(prefix="/api")
 
 EXEC_TIMEOUT = 15
-TERMINAL_TIMEOUT = 20
+TERMINAL_TIMEOUT = 300
 PRETTIER_BIN = "/tmp/formatters/node_modules/.bin/prettier"
 
 # ------------------- Models -------------------
@@ -202,12 +373,7 @@ TERMINAL_SESSIONS: dict[str, str] = {}
 
 
 def _get_session_dir(session_id: str) -> str:
-    cwd = TERMINAL_SESSIONS.get(session_id)
-    if cwd and os.path.isdir(cwd):
-        return cwd
-    cwd = tempfile.mkdtemp(prefix=f"cc-term-{session_id[:8]}-")
-    TERMINAL_SESSIONS[session_id] = cwd
-    return cwd
+    return _repo_dir(session_id)
 
 
 class TerminalExecRequest(BaseModel):
@@ -437,7 +603,7 @@ class GitRequest(BaseModel):
 
 
 def _repo_dir(session_id: str) -> str:
-    d = os.path.join("/tmp", f"cc-repo-{session_id[:16]}")
+    d = os.path.join(tempfile.gettempdir(), f"cc-repo-{session_id[:16]}")
     os.makedirs(d, exist_ok=True)
     return d
 

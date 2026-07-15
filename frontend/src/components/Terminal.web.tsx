@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { WebView } from "react-native-webview";
 import { Feather } from "@expo/vector-icons";
 
 import { useApp } from "@/src/context/AppContext";
@@ -76,15 +75,15 @@ export default function Terminal() {
         </View>
       </View>
       <View style={styles.body}>
-        <WebView
-          originWhitelist={["*"]}
-          source={{ html }}
-          javaScriptEnabled
-          domStorageEnabled
-          hideKeyboardAccessoryView={true}
-          keyboardDisplayRequiresUserAction={false}
-          style={{ flex: 1, backgroundColor: theme.terminalBg }}
-          androidLayerType="hardware"
+        <iframe
+          title="terminal"
+          srcDoc={html}
+          style={{
+            border: "none",
+            width: "100%",
+            height: "100%",
+            background: theme.terminalBg,
+          }}
         />
       </View>
     </View>

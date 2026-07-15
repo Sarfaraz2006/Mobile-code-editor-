@@ -110,7 +110,7 @@ export default function Extensions() {
             }}
           >
             Curated open source AI coding tools. Tap "Clone into workspace" to
-            copy the repo files into `extensions/<id>/`. Full runtime
+            copy the repo files into `extensions/{"<id>"}/`. Full runtime
             integration (LSP, agent processes) is coming next.
           </Text>
           <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={{ padding: 12 }}>
