@@ -97,6 +97,9 @@ function EditorScreen() {
     clearTerminal();
     appendTerminal(`▶ Running ${activeTab.name} (${activeLang.label})...\n\n`);
     try {
+      if (!BACKEND_URL) {
+        throw new Error("No backend server configured");
+      }
       const res = await fetch(`${BACKEND_URL}/api/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -117,7 +120,35 @@ function EditorScreen() {
         );
       }
     } catch (e: any) {
-      appendTerminal(`\n[Network error] ${e?.message || String(e)}\n`);
+      appendTerminal(`\n[Network error / Fallback] ${e?.message || String(e)}\n`);
+      if (activeLang.runnable === "javascript") {
+        appendTerminal(`Executing JavaScript code locally on device...\n\n`);
+        const start = Date.now();
+        const logs: string[] = [];
+        const originalLog = console.log;
+        console.log = (...args) => {
+          logs.push(args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' '));
+        };
+        try {
+          const fn = new Function(activeTab.content);
+          fn();
+          console.log = originalLog;
+          const duration = Date.now() - start;
+          if (logs.length > 0) appendTerminal(logs.join('\n') + '\n');
+          appendTerminal(`\n[exit 0] ${duration}ms (Local Execution)\n`);
+        } catch (err: any) {
+          console.log = originalLog;
+          const duration = Date.now() - start;
+          if (logs.length > 0) appendTerminal(logs.join('\n') + '\n');
+          appendTerminal(`\nError: ${err?.message || String(err)}\n`);
+          appendTerminal(`\n[exit 1] ${duration}ms (Local Execution)\n`);
+        }
+      } else if (activeLang.runnable === "python") {
+        appendTerminal(
+          `\n[Python Offline Warning] Cannot execute Python files natively on Android without a running backend server.\n` +
+          `Please configure EXPO_PUBLIC_BACKEND_URL or connect to a server workspace to run Python scripts.\n`
+        );
+      }
     } finally {
       setRunning(false);
     }
