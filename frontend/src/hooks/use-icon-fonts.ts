@@ -44,9 +44,8 @@ const iconFontMap = (): Record<string, string> =>
     Object.entries(ICON_FAMILIES).map(([key, file]) => [key, cdnUrl(file)]),
   );
 
-export const useIconFonts = (): readonly [boolean, Error | null] =>
-  useFonts(
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
-      ? iconFontMap()
-      : {},
-  );
+export const useIconFonts = (): readonly [boolean, Error | null] => {
+  const isStoreClient = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const [loaded, error] = useFonts(isStoreClient ? iconFontMap() : {});
+  return isStoreClient ? [loaded, error] : [true, null];
+};
