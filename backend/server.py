@@ -373,7 +373,12 @@ TERMINAL_SESSIONS: dict[str, str] = {}
 
 
 def _get_session_dir(session_id: str) -> str:
-    return _repo_dir(session_id)
+    if session_id not in TERMINAL_SESSIONS:
+        d = os.path.join(tempfile.gettempdir(), f"cc-term-{session_id[:16]}")
+        os.makedirs(d, exist_ok=True)
+        TERMINAL_SESSIONS[session_id] = d
+    return TERMINAL_SESSIONS[session_id]
+
 
 
 class TerminalExecRequest(BaseModel):
