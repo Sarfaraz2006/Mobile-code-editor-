@@ -157,7 +157,7 @@ JNIEXPORT jint JNICALL Java_com_emergent_portabledevstudio_nojt5o_JNI_createSubp
     char const* cmd_utf8 = (*env)->GetStringUTFChars(env, cmd, NULL);
     int ptm = create_subprocess(env, cmd_utf8, cmd_cwd, argv, envp, &procId, rows, columns, cell_width, cell_height);
     (*env)->ReleaseStringUTFChars(env, cmd, cmd_utf8);
-    (*env)->ReleaseStringUTFChars(env, cmd, cmd_cwd);
+    (*env)->ReleaseStringUTFChars(env, cwd, cmd_cwd);
 
     if (argv) {
         for (char** tmp = argv; *tmp; ++tmp) free(*tmp);

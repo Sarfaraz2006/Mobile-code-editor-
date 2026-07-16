@@ -67,6 +67,7 @@ agenthub/agents/youtube/db
 # Archive files and large assets
 **/*.zip
 **/*.tar.gz
+!frontend/android/app/src/main/assets/ubuntu-rootfs.tar.gz
 **/*.tar
 **/*.tgz
 *.pack

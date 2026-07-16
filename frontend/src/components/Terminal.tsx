@@ -59,7 +59,7 @@ export default function Terminal() {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === "ready") {
         if (NativeModules.LocalTerminalModule && Platform.OS === "android") {
-          NativeModules.LocalTerminalModule.startShell("/data/data/com.emergent.portabledevstudio.nojt5o/files");
+          NativeModules.LocalTerminalModule.startShell("");
         }
       } else if (msg.type === "input") {
         if (NativeModules.LocalTerminalModule && Platform.OS === "android") {
