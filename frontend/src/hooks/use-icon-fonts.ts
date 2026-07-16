@@ -6,8 +6,9 @@
 // ICON_VECTOR_VERSION must match @expo/vector-icons in package.json.
 // Usage: const [loaded, error] = useIconFonts();
 
+import { useState, useEffect } from "react";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import { useFonts } from "expo-font";
+import * as Font from "expo-font";
 
 const ICON_VECTOR_VERSION = "15.1.1";
 
@@ -46,6 +47,15 @@ const iconFontMap = (): Record<string, string> =>
 
 export const useIconFonts = (): readonly [boolean, Error | null] => {
   const isStoreClient = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-  const [loaded, error] = useFonts(isStoreClient ? iconFontMap() : {});
-  return isStoreClient ? [loaded, error] : [true, null];
+  const [loaded, setLoaded] = useState(!isStoreClient);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!isStoreClient) return;
+    Font.loadAsync(iconFontMap())
+      .then(() => setLoaded(true))
+      .catch((err) => setError(err));
+  }, [isStoreClient]);
+
+  return [loaded, error] as const;
 };
