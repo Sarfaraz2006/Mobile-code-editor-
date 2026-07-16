@@ -78,6 +78,11 @@ export function buildTerminalHtml(opts: {
     let ws;
     let localMode = false;
     let currentLine = '';
+    const isReactNative = !!(window.ReactNativeWebView);
+
+    window.writeTerminalData = (data) => {
+      term.write(data);
+    };
 
     const prompt = () => term.write('\\r\\nlocal-shell$ ');
 
@@ -120,6 +125,10 @@ export function buildTerminalHtml(opts: {
     }
 
     function connect() {
+      if (isReactNative) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+        return;
+      }
       const wsUrl = "${wsUrl}";
       if (!wsUrl) {
         startLocalShell();
@@ -168,6 +177,10 @@ export function buildTerminalHtml(opts: {
     }
     
     term.onData(data => {
+      if (isReactNative) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'input', data }));
+        return;
+      }
       if (localMode) {
         for (let i = 0; i < data.length; i++) {
           const char = data[i];

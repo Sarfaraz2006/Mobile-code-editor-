@@ -1,9 +1,12 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  NativeModules,
+  DeviceEventEmitter,
+  Platform,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { Feather } from "@expo/vector-icons";
@@ -21,6 +24,7 @@ export default function Terminal() {
     isRunning,
     theme,
   } = useApp();
+  const webViewRef = useRef<WebView>(null);
 
   const html = useMemo(() => {
     return buildTerminalHtml({
@@ -30,7 +34,40 @@ export default function Terminal() {
     });
   }, [theme, sessionId]);
 
+  useEffect(() => {
+    if (!isTerminalOpen || Platform.OS !== "android") return;
+
+    const subscription = DeviceEventEmitter.addListener("onShellData", (data) => {
+      if (data) {
+        const escaped = JSON.stringify(data);
+        webViewRef.current?.injectJavaScript(`window.writeTerminalData(${escaped}); true;`);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (NativeModules.LocalTerminalModule) {
+        NativeModules.LocalTerminalModule.closeShell();
+      }
+    };
+  }, [isTerminalOpen]);
+
   if (!isTerminalOpen) return null;
+
+  const onMessage = (event: any) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === "ready") {
+        if (NativeModules.LocalTerminalModule && Platform.OS === "android") {
+          NativeModules.LocalTerminalModule.startShell("/data/data/com.emergent.portabledevstudio.nojt5o/files");
+        }
+      } else if (msg.type === "input") {
+        if (NativeModules.LocalTerminalModule && Platform.OS === "android") {
+          NativeModules.LocalTerminalModule.writeShellData(msg.data);
+        }
+      }
+    } catch (e) {}
+  };
 
   return (
     <View
@@ -47,7 +84,7 @@ export default function Terminal() {
         <View style={styles.headerLeft}>
           <Feather name="terminal" size={14} color={theme.textPrimary} />
           <Text style={[styles.title, { color: theme.textPrimary }]}>
-            TERMINAL
+            TERMINAL (LOCAL SHELL)
           </Text>
           {isRunning && (
             <View
@@ -77,10 +114,12 @@ export default function Terminal() {
       </View>
       <View style={styles.body}>
         <WebView
+          ref={webViewRef}
           originWhitelist={["*"]}
           source={{ html }}
           javaScriptEnabled
           domStorageEnabled
+          onMessage={onMessage}
           hideKeyboardAccessoryView={true}
           keyboardDisplayRequiresUserAction={false}
           style={{ flex: 1, backgroundColor: theme.terminalBg }}
