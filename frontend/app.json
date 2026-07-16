@@ -18,7 +18,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.portabledevstudio.nojt5o"
+      "package": "com.termux"
     },
     "web": {
       "bundler": "metro",

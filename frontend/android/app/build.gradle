@@ -89,7 +89,7 @@ android {
 
     namespace 'com.emergent.portabledevstudio.nojt5o'
     defaultConfig {
-        applicationId 'com.emergent.portabledevstudio.nojt5o'
+        applicationId 'com.termux'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
